@@ -1,1 +1,125 @@
+#Question 1
+-- Create Database
+CREATE DATABASE ClinicDB;
+USE ClinicDB;
 
+-- Patients Table
+CREATE TABLE Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    dob DATE,
+    gender ENUM('Male', 'Female', 'Other'),
+    phone VARCHAR(15) UNIQUE NOT NULL
+);
+
+-- Doctors Table
+CREATE TABLE Doctors (
+    doctor_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    specialization VARCHAR(100),
+    phone VARCHAR(15) UNIQUE NOT NULL
+);
+
+-- Appointments Table
+CREATE TABLE Appointments (
+    appointment_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT,
+    doctor_id INT,
+    appointment_date DATETIME NOT NULL,
+    reason TEXT,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id),
+    FOREIGN KEY (doctor_id) REFERENCES Doctors(doctor_id)
+);
+
+-- Treatments Table (M-M via Appointment)
+CREATE TABLE Treatments (
+    treatment_id INT AUTO_INCREMENT PRIMARY KEY,
+    appointment_id INT,
+    description TEXT,
+    medication VARCHAR(255),
+    FOREIGN KEY (appointment_id) REFERENCES Appointments(appointment_id)
+);
+
+-- Sample Data
+INSERT INTO Patients (name, dob, gender, phone) VALUES
+('John Doe', '1990-04-12', 'Male', '0700111222');
+
+INSERT INTO Doctors (name, specialization, phone) VALUES
+('Dr. Jane Smith', 'Cardiology', '0711222333');
+
+INSERT INTO Appointments (patient_id, doctor_id, appointment_date, reason) VALUES
+(1, 1, '2025-05-10 09:30:00', 'Chest pain');
+
+INSERT INTO Treatments (appointment_id, description, medication) VALUES
+(1, 'ECG and medication prescribed', 'Aspirin 75mg');
+
+
+#Question 2
+CREATE DATABASE TaskManager;
+USE TaskManager;
+
+CREATE TABLE Users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL
+);
+
+CREATE TABLE Tasks (
+    task_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    title VARCHAR(100),
+    description TEXT,
+    due_date DATE,
+    is_complete BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+);
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import mysql.connector
+
+app = FastAPI()
+
+db = mysql.connector.connect(
+    host="localhost",
+    user="your_username",
+    password="your_password",
+    database="TaskManager"
+)
+
+cursor = db.cursor(dictionary=True)
+
+class Task(BaseModel):
+    user_id: int
+    title: str
+    description: str
+    due_date: str
+    is_complete: bool = False
+
+@app.post("/tasks")
+def create_task(task: Task):
+    query = "INSERT INTO Tasks (user_id, title, description, due_date, is_complete) VALUES (%s, %s, %s, %s, %s)"
+    cursor.execute(query, (task.user_id, task.title, task.description, task.due_date, task.is_complete))
+    db.commit()
+    return {"message": "Task created"}
+
+@app.get("/tasks/{task_id}")
+def read_task(task_id: int):
+    cursor.execute("SELECT * FROM Tasks WHERE task_id = %s", (task_id,))
+    result = cursor.fetchone()
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return result
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, task: Task):
+    query = "UPDATE Tasks SET title=%s, description=%s, due_date=%s, is_complete=%s WHERE task_id=%s"
+    cursor.execute(query, (task.title, task.description, task.due_date, task.is_complete, task_id))
+    db.commit()
+    return {"message": "Task updated"}
+
+@app.delete("/tasks/{task_id}")
+def delete_task(task_id: int):
+    cursor.execute("DELETE FROM Tasks WHERE task_id = %s", (task_id,))
+    db.commit()
+    return {"message": "Task deleted"}
